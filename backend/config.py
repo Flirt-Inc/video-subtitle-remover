@@ -52,11 +52,17 @@ else:
     ffmpeg_bin = os.path.join('macos', 'ffmpeg')
 FFMPEG_PATH = os.path.join(BASE_DIR, '', 'ffmpeg', ffmpeg_bin)
 
-if 'ffmpeg.exe' not in os.listdir(os.path.join(BASE_DIR, '', 'ffmpeg', 'win_x64')):
-    fs = Filesplit()
-    fs.merge(input_dir=os.path.join(BASE_DIR, '', 'ffmpeg', 'win_x64'))
+try:
+    if 'ffmpeg.exe' not in os.listdir(os.path.join(BASE_DIR, '', 'ffmpeg', 'win_x64')):
+        fs = Filesplit()
+        fs.merge(input_dir=os.path.join(BASE_DIR, '', 'ffmpeg', 'win_x64'))
+except FileNotFoundError:
+    pass
 # 将ffmpeg添加可执行权限
-os.chmod(FFMPEG_PATH, stat.S_IRWXU + stat.S_IRWXG + stat.S_IRWXO)
+try:
+    os.chmod(FFMPEG_PATH, stat.S_IRWXU + stat.S_IRWXG + stat.S_IRWXO)
+except FileNotFoundError:
+    pass
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 # 是否使用ONNX(DirectML/AMD/Intel)
@@ -109,12 +115,13 @@ MODE = InpaintMode.STTN
 # 用于判断是不是非字幕区域(一般认为字幕文本框的长度是要大于宽度的，如果字幕框的高大于宽，且大于的幅度超过指定像素点大小，则认为是错误检测)
 THRESHOLD_HEIGHT_WIDTH_DIFFERENCE = 10
 # 用于放大mask大小，防止自动检测的文本框过小，inpaint阶段出现文字边，有残留
-SUBTITLE_AREA_DEVIATION_PIXEL = 20
+SUBTITLE_AREA_DEVIATION_PIXEL = 50
 # 同于判断两个文本框是否为同一行字幕，高度差距指定像素点以内认为是同一行
 THRESHOLD_HEIGHT_DIFFERENCE = 20
 # 用于判断两个字幕文本的矩形框是否相似，如果X轴和Y轴偏差都在指定阈值内，则认为时同一个文本框
 PIXEL_TOLERANCE_Y = 20  # 允许检测框纵向偏差的像素点数
 PIXEL_TOLERANCE_X = 20  # 允许检测框横向偏差的像素点数
+MASK_DILATION_ITERATIONS = 2
 # ×××××××××× 通用设置 end ××××××××××
 
 # ×××××××××× InpaintMode.STTN算法设置 start ××××××××××
@@ -137,7 +144,7 @@ PIXEL_TOLERANCE_X = 20  # 允许检测框横向偏差的像素点数
 效果：设置越大速度越慢，但效果越好
 注意：要保证STTN_MAX_LOAD_NUM大于STTN_NEIGHBOR_STRIDE和STTN_REFERENCE_LENGTH
 """
-STTN_SKIP_DETECTION = True
+STTN_SKIP_DETECTION = False
 # 参考帧步长
 STTN_NEIGHBOR_STRIDE = 5
 # 参考帧长度（数量）

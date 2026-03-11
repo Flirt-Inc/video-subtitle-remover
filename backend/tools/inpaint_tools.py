@@ -2,7 +2,7 @@ import multiprocessing
 import cv2
 import numpy as np
 
-from backend import config
+import config
 from backend.inpaint.lama_inpaint import LamaInpaint
 
 
@@ -88,6 +88,11 @@ def create_mask(size, coords_list):
             y2 = ymax + config.SUBTITLE_AREA_DEVIATION_PIXEL
             cv2.rectangle(mask, (x1, y1),
                           (x2, y2), (255, 255, 255), thickness=-1)
+        # Apply morphological dilation for smoother, rounded mask edges
+        dilation = getattr(config, 'MASK_DILATION_ITERATIONS', 0)
+        if dilation > 0:
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+            mask = cv2.dilate(mask, kernel, iterations=dilation)
     return mask
 
 
