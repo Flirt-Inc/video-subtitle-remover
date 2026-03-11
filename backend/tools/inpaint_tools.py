@@ -72,10 +72,51 @@ def inpaint_with_multiple_masks(censored_img, mask_list):
     return inpainted_frame
 
 
-def create_mask(size, coords_list, polygons=None):
+_craft_net = None
+_refine_net = None
+
+
+def _get_craft_models():
+    """Lazy-load CRAFT models (singleton)."""
+    global _craft_net, _refine_net
+    if _craft_net is None:
+        import torch
+        from craft_text_detector import load_craftnet_model, load_refinenet_model
+        use_cuda = torch.cuda.is_available()
+        _craft_net = load_craftnet_model(cuda=use_cuda)
+        _refine_net = load_refinenet_model(cuda=use_cuda)
+    return _craft_net, _refine_net
+
+
+def detect_characters(frame):
+    """Run CRAFT character-level detection on a frame, return list of polygons."""
+    import torch
+    from craft_text_detector import get_prediction
+    craft_net, refine_net = _get_craft_models()
+    result = get_prediction(
+        image=frame,
+        craft_net=craft_net,
+        refine_net=refine_net,
+        text_threshold=0.7,
+        link_threshold=0.4,
+        low_text=0.4,
+        cuda=torch.cuda.is_available(),
+        long_size=1280,
+    )
+    return result["boxes"]
+
+
+def create_mask(size, coords_list, polygons=None, frame=None):
     mask = np.zeros(size, dtype="uint8")
     has_content = False
-    if polygons is not None and getattr(config, 'USE_POLYGON_MASK', False):
+    mask_type = getattr(config, 'MASK_TYPE', 'rect')
+    if mask_type == 'character' and frame is not None:
+        boxes = detect_characters(frame)
+        for box in boxes:
+            pts = np.array(box, dtype=np.int32)
+            cv2.fillPoly(mask, [pts], 255)
+        has_content = len(boxes) > 0
+    elif mask_type == 'polygon' and polygons is not None:
         for poly in polygons:
             pts = np.array(poly, dtype=np.int32)
             cv2.fillPoly(mask, [pts], 255)
@@ -83,7 +124,6 @@ def create_mask(size, coords_list, polygons=None):
     elif coords_list:
         for coords in coords_list:
             xmin, xmax, ymin, ymax = coords
-            # 为了避免框过小，放大10个像素
             x1 = xmin - config.SUBTITLE_AREA_DEVIATION_PIXEL
             if x1 < 0:
                 x1 = 0

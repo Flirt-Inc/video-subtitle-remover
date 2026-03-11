@@ -122,8 +122,8 @@ THRESHOLD_HEIGHT_DIFFERENCE = 20
 PIXEL_TOLERANCE_Y = 20  # 允许检测框纵向偏差的像素点数
 PIXEL_TOLERANCE_X = 20  # 允许检测框横向偏差的像素点数
 MASK_DILATION_ITERATIONS = 2
-# Use polygon masks (fillPoly) instead of rectangular masks (rectangle)
-USE_POLYGON_MASK = False
+# Mask type: 'rect' (rectangles), 'polygon' (PaddleOCR contours), 'character' (CRAFT per-char)
+MASK_TYPE = 'rect'
 # ×××××××××× 通用设置 end ××××××××××
 
 # ×××××××××× InpaintMode.STTN算法设置 start ××××××××××
