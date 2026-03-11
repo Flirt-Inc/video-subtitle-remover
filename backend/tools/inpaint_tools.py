@@ -95,17 +95,25 @@ def _patch_craft_ragged_polys():
 
     numpy >= 1.24 rejects ``np.array(polys)`` when polygons have different
     numbers of points.  Replace the bulk conversion with per-polygon scaling.
+    Also patch getDetBoxes_core which has the same issue.
     """
     from craft_text_detector import craft_utils as _cu
+    from craft_text_detector import predict as _predict
+
+    _orig_adjust = _cu.adjustResultCoordinates
 
     def _adjustResultCoordinates(polys, ratio_w, ratio_h, ratio_net=2):
         if len(polys) > 0:
             for k in range(len(polys)):
                 if polys[k] is not None:
-                    polys[k] *= np.array([ratio_w * ratio_net, ratio_h * ratio_net])
+                    polys[k] = np.array(polys[k]) * np.array([ratio_w * ratio_net, ratio_h * ratio_net])
         return polys
 
     _cu.adjustResultCoordinates = _adjustResultCoordinates
+
+    # Also patch in predict module in case it cached a reference
+    if hasattr(_predict, 'craft_utils'):
+        _predict.craft_utils.adjustResultCoordinates = _adjustResultCoordinates
 
 
 def _get_craft_models():
@@ -123,21 +131,56 @@ def _get_craft_models():
 
 
 def detect_characters(frame):
-    """Run CRAFT character-level detection on a frame, return list of polygons."""
+    """Run CRAFT character-level detection on a frame, return list of polygons.
+
+    Uses low-level CRAFT APIs to avoid numpy ragged-array crashes in
+    ``get_prediction`` (numpy >= 1.24 rejects ``np.array(polys)`` when
+    polygons have varying point counts).
+    """
+    import time
     import torch
-    from craft_text_detector import get_prediction
+    from craft_text_detector import craft_utils, image_utils, torch_utils
+
     craft_net, refine_net = _get_craft_models()
-    result = get_prediction(
-        image=frame,
-        craft_net=craft_net,
-        refine_net=refine_net,
-        text_threshold=0.7,
-        link_threshold=0.4,
-        low_text=0.4,
-        cuda=torch.cuda.is_available(),
-        long_size=1280,
+    use_cuda = torch.cuda.is_available()
+
+    # Resize image for CRAFT
+    img_resized, target_ratio, _ = image_utils.resize_aspect_ratio(
+        frame, square_size=1280, interpolation=cv2.INTER_LINEAR, mag_ratio=1.5
     )
-    return result["boxes"]
+    ratio_h = ratio_w = 1 / target_ratio
+
+    # Forward pass
+    x = torch_utils.normalizeMeanVariance(img_resized)
+    x = torch.from_numpy(x).permute(2, 0, 1).unsqueeze(0)
+    if use_cuda:
+        x = x.cuda()
+
+    with torch.no_grad():
+        y, feature = craft_net(x)
+
+    score_text = y[0, :, :, 0].cpu().data.numpy()
+    score_link = y[0, :, :, 1].cpu().data.numpy()
+
+    # Refine
+    if refine_net is not None:
+        with torch.no_grad():
+            y_refiner = refine_net(y, feature)
+        score_link = y_refiner[0, :, :, 0].cpu().data.numpy()
+
+    # Get detection boxes (these are uniform 4-point quads)
+    boxes, polys = craft_utils.getDetBoxes(
+        score_text, score_link,
+        text_threshold=0.7, link_threshold=0.4, low_text=0.4, poly=False,
+    )
+
+    # Scale boxes back to original image coords (per-element to avoid ragged np.array)
+    scale = np.array([ratio_w * 2, ratio_h * 2])
+    for k in range(len(boxes)):
+        if boxes[k] is not None:
+            boxes[k] = np.array(boxes[k]) * scale
+
+    return boxes
 
 
 def create_mask(size, coords_list, polygons=None, frame=None):
