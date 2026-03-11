@@ -76,11 +76,26 @@ _craft_net = None
 _refine_net = None
 
 
+def _patch_torchvision_model_urls():
+    """Patch missing model_urls for newer torchvision (>= 0.13).
+
+    craft-text-detector imports `model_urls` from `torchvision.models.vgg`
+    at module level, but torchvision removed it in favour of the Weights API.
+    We inject the dict back so the import succeeds.
+    """
+    import torchvision.models.vgg as _vgg_mod
+    if not hasattr(_vgg_mod, 'model_urls'):
+        _vgg_mod.model_urls = {
+            'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
+        }
+
+
 def _get_craft_models():
     """Lazy-load CRAFT models (singleton)."""
     global _craft_net, _refine_net
     if _craft_net is None:
         import torch
+        _patch_torchvision_model_urls()
         from craft_text_detector import load_craftnet_model, load_refinenet_model
         use_cuda = torch.cuda.is_available()
         _craft_net = load_craftnet_model(cuda=use_cuda)
