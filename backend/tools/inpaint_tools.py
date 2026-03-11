@@ -90,12 +90,31 @@ def _patch_torchvision_model_urls():
         }
 
 
+def _patch_craft_ragged_polys():
+    """Patch CRAFT's adjustResultCoordinates for numpy >= 1.24.
+
+    numpy >= 1.24 rejects ``np.array(polys)`` when polygons have different
+    numbers of points.  Replace the bulk conversion with per-polygon scaling.
+    """
+    from craft_text_detector import craft_utils as _cu
+
+    def _adjustResultCoordinates(polys, ratio_w, ratio_h, ratio_net=2):
+        if len(polys) > 0:
+            for k in range(len(polys)):
+                if polys[k] is not None:
+                    polys[k] *= np.array([ratio_w * ratio_net, ratio_h * ratio_net])
+        return polys
+
+    _cu.adjustResultCoordinates = _adjustResultCoordinates
+
+
 def _get_craft_models():
     """Lazy-load CRAFT models (singleton)."""
     global _craft_net, _refine_net
     if _craft_net is None:
         import torch
         _patch_torchvision_model_urls()
+        _patch_craft_ragged_polys()
         from craft_text_detector import load_craftnet_model, load_refinenet_model
         use_cuda = torch.cuda.is_available()
         _craft_net = load_craftnet_model(cuda=use_cuda)
