@@ -137,9 +137,8 @@ def detect_characters(frame):
     ``get_prediction`` (numpy >= 1.24 rejects ``np.array(polys)`` when
     polygons have varying point counts).
     """
-    import time
     import torch
-    from craft_text_detector import craft_utils, image_utils, torch_utils
+    from craft_text_detector import craft_utils, image_utils
 
     craft_net, refine_net = _get_craft_models()
     use_cuda = torch.cuda.is_available()
@@ -151,7 +150,7 @@ def detect_characters(frame):
     ratio_h = ratio_w = 1 / target_ratio
 
     # Forward pass
-    x = torch_utils.normalizeMeanVariance(img_resized)
+    x = image_utils.normalizeMeanVariance(img_resized)
     x = torch.from_numpy(x).permute(2, 0, 1).unsqueeze(0)
     if use_cuda:
         x = x.cuda()
