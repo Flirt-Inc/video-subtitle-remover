@@ -42,8 +42,7 @@ class SubtitleDetect:
         paddle.disable_signal_handler()
         from paddleocr.tools.infer import utility
         from paddleocr.tools.infer.predict_det import TextDetector
-        # 获取参数对象
-        importlib.reload(config)
+        # 获取参数对象 (reload removed — server sets config externally)
         args = utility.parse_args()
         args.det_algorithm = 'DB'
         args.det_model_dir = self.convertToOnnxModelIfNeeded(config.DET_MODEL_PATH)
@@ -564,7 +563,7 @@ class SubtitleDetect:
 
 class SubtitleRemover:
     def __init__(self, vd_path, sub_area=None, gui_mode=False):
-        importlib.reload(config)
+        # importlib.reload(config) removed — server sets config externally
         # 线程锁
         self.lock = threading.RLock()
         # 用户指定的字幕区域位置
