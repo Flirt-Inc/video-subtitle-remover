@@ -72,9 +72,15 @@ def inpaint_with_multiple_masks(censored_img, mask_list):
     return inpainted_frame
 
 
-def create_mask(size, coords_list):
+def create_mask(size, coords_list, polygons=None):
     mask = np.zeros(size, dtype="uint8")
-    if coords_list:
+    has_content = False
+    if polygons is not None and getattr(config, 'USE_POLYGON_MASK', False):
+        for poly in polygons:
+            pts = np.array(poly, dtype=np.int32)
+            cv2.fillPoly(mask, [pts], 255)
+        has_content = len(polygons) > 0
+    elif coords_list:
         for coords in coords_list:
             xmin, xmax, ymin, ymax = coords
             # 为了避免框过小，放大10个像素
@@ -88,7 +94,9 @@ def create_mask(size, coords_list):
             y2 = ymax + config.SUBTITLE_AREA_DEVIATION_PIXEL
             cv2.rectangle(mask, (x1, y1),
                           (x2, y2), (255, 255, 255), thickness=-1)
-        # Apply morphological dilation for smoother, rounded mask edges
+        has_content = True
+    # Apply morphological dilation for smoother, rounded mask edges
+    if has_content:
         dilation = getattr(config, 'MASK_DILATION_ITERATIONS', 0)
         if dilation > 0:
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))

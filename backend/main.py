@@ -35,6 +35,7 @@ class SubtitleDetect:
     def __init__(self, video_path, sub_area=None):
         self.video_path = video_path
         self.sub_area = sub_area
+        self.polygon_dict = {}  # {frame_no: [[[x,y],...], ...]} raw PaddleOCR polygons
 
     @cached_property
     def text_detector(self):
@@ -91,7 +92,10 @@ class SubtitleDetect:
             # 读取视频帧成功
             current_frame_no += 1
             dt_boxes, elapse = self.detect_subtitle(frame)
-            coordinate_list = self.get_coordinates(dt_boxes.tolist())
+            box_list = dt_boxes.tolist() if dt_boxes is not None and len(dt_boxes) > 0 else []
+            coordinate_list = self.get_coordinates(box_list)
+            if getattr(config, 'USE_POLYGON_MASK', False) and box_list:
+                self.polygon_dict[current_frame_no] = box_list
             if coordinate_list:
                 temp_list = []
                 for coordinate in coordinate_list:
@@ -723,7 +727,8 @@ class SubtitleRemover:
                             continue
                         elif len(temp_frames) == 1:
                             inner_index += 1
-                            single_mask = create_mask(self.mask_size, sub_list[index])
+                            single_mask = create_mask(self.mask_size, sub_list[index],
+                                                      polygons=self._get_polygons(index))
                             if self.lama_inpaint is None:
                                 self.lama_inpaint = LamaInpaint()
                             inpainted_frame = self.lama_inpaint(frame, single_mask)
@@ -734,11 +739,13 @@ class SubtitleRemover:
                         else:
                             # 将读取的视频帧分批处理
                             # 1. 获取当前批次使用的mask
-                            mask = create_mask(self.mask_size, sub_list[start_frame_no])
+                            polys = self._get_polygons_for_range(start_frame_no, end_frame_no + 1)
+                            mask = create_mask(self.mask_size, sub_list[start_frame_no], polygons=polys)
                             for batch in batch_generator(temp_frames, config.PROPAINTER_MAX_LOAD_NUM):
                                 # 2. 调用批推理
                                 if len(batch) == 1:
-                                    single_mask = create_mask(self.mask_size, sub_list[start_frame_no])
+                                    single_mask = create_mask(self.mask_size, sub_list[start_frame_no],
+                                                              polygons=self._get_polygons(start_frame_no))
                                     if self.lama_inpaint is None:
                                         self.lama_inpaint = LamaInpaint()
                                     inpainted_frame = self.lama_inpaint(frame, single_mask)
@@ -832,7 +839,8 @@ class SubtitleRemover:
                                 if area not in mask_area_coordinates:
                                     mask_area_coordinates.append(area)
                     # 1. 获取当前批次使用的mask
-                    mask = create_mask(self.mask_size, mask_area_coordinates)
+                    mask = create_mask(self.mask_size, mask_area_coordinates,
+                                       polygons=self._get_polygons_for_range(start_frame_index, end_frame_index))
                     print(f'inpaint with mask: {mask_area_coordinates}')
                     for batch in batch_generator(frames_need_inpaint, config.STTN_MAX_LOAD_NUM):
                         # 2. 调用批推理
@@ -845,6 +853,21 @@ class SubtitleRemover:
                                 if self.gui_mode:
                                     self.preview_frame = cv2.hconcat([batch[i], inpainted_frame])
                         self.update_progress(tbar, increment=len(batch))
+
+    def _get_polygons(self, frame_no):
+        """Get raw polygon data for a frame (for polygon mask mode)."""
+        if getattr(config, 'USE_POLYGON_MASK', False):
+            return self.sub_detector.polygon_dict.get(frame_no)
+        return None
+
+    def _get_polygons_for_range(self, start, end):
+        """Collect raw polygon data from a range of frames."""
+        if not getattr(config, 'USE_POLYGON_MASK', False):
+            return None
+        all_polys = []
+        for fn in range(start, end):
+            all_polys.extend(self.sub_detector.polygon_dict.get(fn, []))
+        return all_polys if all_polys else None
 
     def lama_mode(self, tbar):
         print('use lama mode')
@@ -860,7 +883,7 @@ class SubtitleRemover:
             original_frame = frame
             index += 1
             if index in sub_list.keys():
-                mask = create_mask(self.mask_size, sub_list[index])
+                mask = create_mask(self.mask_size, sub_list[index], polygons=self._get_polygons(index))
                 if config.LAMA_SUPER_FAST:
                     frame = cv2.inpaint(frame, mask, 3, cv2.INPAINT_TELEA)
                 else:
