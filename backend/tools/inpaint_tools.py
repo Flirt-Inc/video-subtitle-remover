@@ -146,7 +146,7 @@ def detect_characters(frame):
 
     # Resize image for CRAFT
     img_resized, target_ratio, _ = image_utils.resize_aspect_ratio(
-        frame, square_size=1280, interpolation=cv2.INTER_LINEAR, mag_ratio=1.5
+        frame, long_size=1280, interpolation=cv2.INTER_LINEAR,
     )
     ratio_h = ratio_w = 1 / target_ratio
 
