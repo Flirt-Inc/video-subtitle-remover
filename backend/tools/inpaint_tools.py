@@ -159,13 +159,12 @@ def detect_characters(frame, text_threshold=0.4):
     with torch.no_grad():
         y, feature = craft_net(x)
 
-    # Threshold the text-score heatmap into a binary mask
-    score_text = y[0, :, :, 0].cpu().data.numpy()
-    binary = (score_text > text_threshold).astype(np.uint8) * 255
-
-    # Resize back to original frame dimensions
+    # Resize the float heatmap to original resolution first (smooth interpolation),
+    # then threshold — gives much more precise character edges than resizing binary.
+    score_text = y[0, :, :, 0].cpu().data.numpy().astype(np.float32)
     orig_h, orig_w = frame.shape[:2]
-    mask = cv2.resize(binary, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
+    score_full = cv2.resize(score_text, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    mask = (score_full > text_threshold).astype(np.uint8) * 255
 
     return mask
 
