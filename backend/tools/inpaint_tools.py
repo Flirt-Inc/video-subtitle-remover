@@ -163,6 +163,14 @@ def detect_characters(frame, text_threshold=0.4):
     # then threshold — gives much more precise character edges than resizing binary.
     score_text = y[0, :, :, 0].cpu().data.numpy().astype(np.float32)
     orig_h, orig_w = frame.shape[:2]
+
+    # Crop heatmap to content region (remove 32-padding added by resize_aspect_ratio).
+    # resize_aspect_ratio pads the image to dimensions divisible by 32 before CRAFT
+    # processes it. The heatmap (at stride-2) includes these padding columns/rows.
+    # Compute the actual content extent from the resize ratio and original dimensions.
+    content_hm_w = int(orig_w * target_ratio) // 2
+    content_hm_h = int(orig_h * target_ratio) // 2
+    score_text = score_text[:content_hm_h, :content_hm_w]
     score_full = cv2.resize(score_text, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     mask = (score_full > text_threshold).astype(np.uint8) * 255
 
