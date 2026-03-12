@@ -166,6 +166,15 @@ def detect_characters(frame, text_threshold=0.4):
     score_full = cv2.resize(score_text, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     mask = (score_full > text_threshold).astype(np.uint8) * 255
 
+    # Apply horizontal pixel shift if configured
+    shift_x = getattr(config, 'MASK_SHIFT_X', 0)
+    if shift_x != 0:
+        mask = np.roll(mask, shift_x, axis=1)
+        if shift_x > 0:
+            mask[:, :shift_x] = 0
+        else:
+            mask[:, shift_x:] = 0
+
     return mask
 
 
@@ -202,7 +211,8 @@ def create_mask(size, coords_list, polygons=None, frame=None):
     if has_content:
         dilation = getattr(config, 'MASK_DILATION_ITERATIONS', 0)
         if dilation > 0:
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+            ksize = getattr(config, 'MASK_DILATION_KERNEL_SIZE', 15)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))
             mask = cv2.dilate(mask, kernel, iterations=dilation)
     return mask
 

@@ -122,6 +122,10 @@ THRESHOLD_HEIGHT_DIFFERENCE = 20
 PIXEL_TOLERANCE_Y = 20  # 允许检测框纵向偏差的像素点数
 PIXEL_TOLERANCE_X = 20  # 允许检测框横向偏差的像素点数
 MASK_DILATION_ITERATIONS = 2
+# Horizontal pixel shift applied to character mask (positive = right, negative = left)
+MASK_SHIFT_X = 0
+# Kernel size for morphological dilation (pixels)
+MASK_DILATION_KERNEL_SIZE = 15
 # Mask type: 'rect' (rectangles), 'polygon' (PaddleOCR contours), 'character' (CRAFT per-char)
 MASK_TYPE = 'rect'
 # ×××××××××× 通用设置 end ××××××××××
