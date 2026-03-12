@@ -128,6 +128,11 @@ MASK_SHIFT_X = 0
 MASK_DILATION_KERNEL_SIZE = 15
 # Mask type: 'rect' (rectangles), 'polygon' (PaddleOCR contours), 'character' (CRAFT per-char)
 MASK_TYPE = 'rect'
+# CRAFT text detection heatmap threshold (lower = bigger blobs, default 0.4)
+TEXT_THRESHOLD = 0.4
+# Mask expansion in pixels with 0.25px granularity via 4x upscale trick.
+# If > 0, overrides MASK_DILATION_ITERATIONS + MASK_DILATION_KERNEL_SIZE.
+MASK_DILATION_PX = 0
 # ×××××××××× 通用设置 end ××××××××××
 
 # ×××××××××× InpaintMode.STTN算法设置 start ××××××××××

@@ -130,7 +130,7 @@ def _get_craft_models():
     return _craft_net, _refine_net
 
 
-def detect_characters(frame, text_threshold=0.4):
+def detect_characters(frame, text_threshold=None):
     """Run CRAFT on a frame and return a binary character mask.
 
     Returns an ``np.ndarray`` of dtype ``uint8`` with shape
@@ -139,6 +139,8 @@ def detect_characters(frame, text_threshold=0.4):
     text-score heatmap (thresholded), avoiding the box-merging step that
     groups characters into words.
     """
+    if text_threshold is None:
+        text_threshold = getattr(config, 'TEXT_THRESHOLD', 0.4)
     import torch
     from craft_text_detector import image_utils
 
@@ -217,11 +219,22 @@ def create_mask(size, coords_list, polygons=None, frame=None):
         has_content = True
     # Apply morphological dilation for smoother, rounded mask edges
     if has_content:
-        dilation = getattr(config, 'MASK_DILATION_ITERATIONS', 0)
-        if dilation > 0:
-            ksize = getattr(config, 'MASK_DILATION_KERNEL_SIZE', 15)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))
-            mask = cv2.dilate(mask, kernel, iterations=dilation)
+        dilation_px = getattr(config, 'MASK_DILATION_PX', 0)
+        if dilation_px > 0:
+            # Sub-pixel dilation via 4x upscale trick (0.25px granularity)
+            orig_h, orig_w = mask.shape[:2]
+            mask_up = cv2.resize(mask, (orig_w * 4, orig_h * 4), interpolation=cv2.INTER_NEAREST)
+            k = max(3, 2 * round(dilation_px * 4) + 1)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+            mask_up = cv2.dilate(mask_up, kernel, iterations=1)
+            mask = cv2.resize(mask_up, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+            mask = (mask > 127).astype(np.uint8) * 255
+        else:
+            dilation = getattr(config, 'MASK_DILATION_ITERATIONS', 0)
+            if dilation > 0:
+                ksize = getattr(config, 'MASK_DILATION_KERNEL_SIZE', 15)
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))
+                mask = cv2.dilate(mask, kernel, iterations=dilation)
     return mask
 
 
