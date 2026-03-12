@@ -130,24 +130,25 @@ def _get_craft_models():
     return _craft_net, _refine_net
 
 
-def detect_characters(frame):
-    """Run CRAFT character-level detection on a frame, return list of polygons.
+def detect_characters(frame, text_threshold=0.4):
+    """Run CRAFT on a frame and return a binary character mask.
 
-    Uses low-level CRAFT APIs to avoid numpy ragged-array crashes in
-    ``get_prediction`` (numpy >= 1.24 rejects ``np.array(polys)`` when
-    polygons have varying point counts).
+    Returns an ``np.ndarray`` of dtype ``uint8`` with shape
+    ``(frame_h, frame_w)`` where detected character pixels are 255 and
+    background pixels are 0.  The mask is derived directly from the CRAFT
+    text-score heatmap (thresholded), avoiding the box-merging step that
+    groups characters into words.
     """
     import torch
-    from craft_text_detector import craft_utils, image_utils
+    from craft_text_detector import image_utils
 
-    craft_net, refine_net = _get_craft_models()
+    craft_net, _ = _get_craft_models()
     use_cuda = torch.cuda.is_available()
 
     # Resize image for CRAFT
     img_resized, target_ratio, _ = image_utils.resize_aspect_ratio(
         frame, long_size=1280, interpolation=cv2.INTER_LINEAR,
     )
-    ratio_h = ratio_w = 1 / target_ratio
 
     # Forward pass
     x = image_utils.normalizeMeanVariance(img_resized)
@@ -158,28 +159,15 @@ def detect_characters(frame):
     with torch.no_grad():
         y, feature = craft_net(x)
 
+    # Threshold the text-score heatmap into a binary mask
     score_text = y[0, :, :, 0].cpu().data.numpy()
-    score_link = y[0, :, :, 1].cpu().data.numpy()
+    binary = (score_text > text_threshold).astype(np.uint8) * 255
 
-    # Refine
-    if refine_net is not None:
-        with torch.no_grad():
-            y_refiner = refine_net(y, feature)
-        score_link = y_refiner[0, :, :, 0].cpu().data.numpy()
+    # Resize back to original frame dimensions
+    orig_h, orig_w = frame.shape[:2]
+    mask = cv2.resize(binary, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
 
-    # Get detection boxes (these are uniform 4-point quads)
-    boxes, polys = craft_utils.getDetBoxes(
-        score_text, score_link,
-        text_threshold=0.7, link_threshold=0.4, low_text=0.4, poly=False,
-    )
-
-    # Scale boxes back to original image coords (per-element to avoid ragged np.array)
-    scale = np.array([ratio_w * 2, ratio_h * 2])
-    for k in range(len(boxes)):
-        if boxes[k] is not None:
-            boxes[k] = np.array(boxes[k]) * scale
-
-    return boxes
+    return mask
 
 
 def create_mask(size, coords_list, polygons=None, frame=None):
@@ -187,11 +175,11 @@ def create_mask(size, coords_list, polygons=None, frame=None):
     has_content = False
     mask_type = getattr(config, 'MASK_TYPE', 'rect')
     if mask_type == 'character' and frame is not None:
-        boxes = detect_characters(frame)
-        for box in boxes:
-            pts = np.array(box, dtype=np.int32)
-            cv2.fillPoly(mask, [pts], 255)
-        has_content = len(boxes) > 0
+        char_mask = detect_characters(frame)
+        if char_mask.shape[:2] != size:
+            char_mask = cv2.resize(char_mask, (size[1], size[0]), interpolation=cv2.INTER_NEAREST)
+        mask = np.maximum(mask, char_mask)
+        has_content = np.any(char_mask > 0)
     elif mask_type == 'polygon' and polygons is not None:
         for poly in polygons:
             pts = np.array(poly, dtype=np.int32)
