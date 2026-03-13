@@ -126,7 +126,7 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
         self._interrupt = False
         device = self._execution_device
         batch_size = 1
-        transformer_dtype = torch.float16
+        transformer_dtype = self.transformer.dtype
 
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps
@@ -140,7 +140,7 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
             height,
             width,
             num_latent_frames,
-            torch.float16,
+            transformer_dtype,
             device,
             generator,
             latents,
