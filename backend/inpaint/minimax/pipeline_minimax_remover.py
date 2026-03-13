@@ -79,7 +79,8 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
         for i in range(len(masks)):
             mask = masks[i]
             mask = mask > 0
-            mask = scipy.ndimage.binary_dilation(mask, iterations=iterations)
+            if iterations > 0:
+                mask = scipy.ndimage.binary_dilation(mask, iterations=iterations)
             masks2.append(mask)
         masks = np.array(masks2).astype(np.float32)
         masks = torch.from_numpy(masks)
