@@ -31,15 +31,15 @@ class MinimaxInpaint:
 
         from backend.inpaint.minimax.transformer_minimax_remover import Transformer3DModel
         from backend.inpaint.minimax.pipeline_minimax_remover import Minimax_Remover_Pipeline
-        from diffusers import AutoencoderKLWan, FlowMatchEulerDiscreteScheduler
+        from diffusers import AutoencoderKLWan, UniPCMultistepScheduler
 
         transformer = Transformer3DModel.from_pretrained(
-            model_path, subfolder="transformer", torch_dtype=torch.bfloat16
+            model_path, subfolder="transformer", torch_dtype=torch.float16
         )
         vae = AutoencoderKLWan.from_pretrained(
             model_path, subfolder="vae", torch_dtype=torch.float16
         )
-        scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+        scheduler = UniPCMultistepScheduler.from_pretrained(
             model_path, subfolder="scheduler"
         )
         self.pipe = Minimax_Remover_Pipeline(
