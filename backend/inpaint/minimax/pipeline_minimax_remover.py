@@ -175,6 +175,10 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
             masked_latents = (masked_latents - latents_mean) * latents_std
             masks_latents = (masks_latents - latents_mean) * latents_std
 
+        # Cast latents to transformer dtype (e.g. bfloat16) for concatenation
+        masked_latents = masked_latents.to(transformer_dtype)
+        masks_latents = masks_latents.to(transformer_dtype)
+
         self._num_timesteps = len(timesteps)
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
@@ -186,7 +190,7 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
                 timestep = t.expand(latents.shape[0])
 
                 noise_pred = self.transformer(
-                    hidden_states=latent_model_input.half(),
+                    hidden_states=latent_model_input.to(transformer_dtype),
                     timestep=timestep
                 )[0]
 
