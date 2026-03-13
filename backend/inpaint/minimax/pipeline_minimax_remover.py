@@ -147,26 +147,30 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
         )
 
         masks = self.expand_masks(masks, iterations)
-        masks = self.resize(masks, height, width).to("cuda:0").half()
+        masks = self.resize(masks, height, width).to(device).half()
         masks[masks>0] = 1
         images = rearrange(images, "f h w c -> c f h w")
-        images = self.resize(images[None,...], height, width).to("cuda:0").half()
+        images = self.resize(images[None,...], height, width).to(device).half()
 
         masked_images = images * (1-masks)
-
-        latents_mean = (
-                torch.tensor(self.vae.config.latents_mean)
-                .view(1, self.vae.config.z_dim, 1, 1, 1)
-                .to(self.vae.device, torch.float16)
-            )
-
-        latents_std =  1.0 / torch.tensor(self.vae.config.latents_std).view(1, self.vae.config.z_dim, 1, 1, 1).to(
-                self.vae.device, torch.float16
-            )
 
         with torch.no_grad():
             masked_latents = self.vae.encode(masked_images.half()).latent_dist.mode()
             masks_latents = self.vae.encode(2*masks.half()-1.0).latent_dist.mode()
+
+        # Create latents_mean/std on the same device as encoder output
+        latent_device = masked_latents.device
+        latents_mean = (
+                torch.tensor(self.vae.config.latents_mean)
+                .view(1, self.vae.config.z_dim, 1, 1, 1)
+                .to(latent_device, torch.float16)
+            )
+
+        latents_std =  1.0 / torch.tensor(self.vae.config.latents_std).view(1, self.vae.config.z_dim, 1, 1, 1).to(
+                latent_device, torch.float16
+            )
+
+        with torch.no_grad():
 
             masked_latents = (masked_latents - latents_mean) * latents_std
             masks_latents = (masks_latents - latents_mean) * latents_std
@@ -190,7 +194,7 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
 
                 progress_bar.update()
 
-        latents = latents.half() / latents_std + latents_mean
+        latents = latents.half() / latents_std.to(latents.device) + latents_mean.to(latents.device)
         video = self.vae.decode(latents, return_dict=False)[0]
         video = self.video_processor.postprocess_video(video, output_type=output_type)
 
