@@ -18,7 +18,7 @@ def log_vram(label: str):
     if torch.cuda.is_available():
         allocated = torch.cuda.memory_allocated() / 1024**3
         reserved = torch.cuda.memory_reserved() / 1024**3
-        total = torch.cuda.get_device_properties(0).total_mem / 1024**3
+        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
         print(f'[VRAM] {label}: {allocated:.1f}GB allocated, {reserved:.1f}GB reserved / {total:.1f}GB total')
 
 # VAE temporal constraint: (F-1) % 4 == 0; author tested up to 500 frames
