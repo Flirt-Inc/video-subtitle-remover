@@ -155,9 +155,16 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
 
         masked_images = images * (1-masks)
 
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+
         with torch.no_grad():
             masked_latents = self.vae.encode(masked_images.half()).latent_dist.mode()
             masks_latents = self.vae.encode(2*masks.half()-1.0).latent_dist.mode()
+
+        if torch.cuda.is_available():
+            peak = torch.cuda.max_memory_allocated() / 1024**3
+            print(f'[VRAM] after VAE encode: peak {peak:.1f}GB')
 
         # Create latents_mean/std on the same device as encoder output
         latent_device = masked_latents.device
@@ -182,6 +189,9 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
 
         self._num_timesteps = len(timesteps)
 
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
 
@@ -199,8 +209,17 @@ class Minimax_Remover_Pipeline(DiffusionPipeline):
 
                 progress_bar.update()
 
+        if torch.cuda.is_available():
+            peak = torch.cuda.max_memory_allocated() / 1024**3
+            print(f'[VRAM] after denoise loop: peak {peak:.1f}GB')
+            torch.cuda.reset_peak_memory_stats()
+
         latents = latents.half() / latents_std.to(latents.device) + latents_mean.to(latents.device)
         video = self.vae.decode(latents, return_dict=False)[0]
+
+        if torch.cuda.is_available():
+            peak = torch.cuda.max_memory_allocated() / 1024**3
+            print(f'[VRAM] after VAE decode: peak {peak:.1f}GB')
         video = self.video_processor.postprocess_video(video, output_type=output_type)
 
         return WanPipelineOutput(frames=video)

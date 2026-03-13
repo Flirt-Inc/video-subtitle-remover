@@ -12,8 +12,17 @@ from backend import config
 
 logger = logging.getLogger(__name__)
 
-# VAE temporal constraint: (F-1) % 4 == 0, max 81
-MINIMAX_MAX_FRAMES = 81
+
+def log_vram(label: str):
+    """Log current GPU VRAM usage."""
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        total = torch.cuda.get_device_properties(0).total_mem / 1024**3
+        print(f'[VRAM] {label}: {allocated:.1f}GB allocated, {reserved:.1f}GB reserved / {total:.1f}GB total')
+
+# VAE temporal constraint: (F-1) % 4 == 0; author tested up to 500 frames
+MINIMAX_MAX_FRAMES = 501
 MINIMAX_OVERLAP = 8
 
 
@@ -218,6 +227,7 @@ class MinimaxInpaint:
             [F, target_h, target_w, 3] uint8 RGB
         """
         num_frames = frames.shape[0]
+        log_vram(f'before inference ({num_frames} frames, {target_w}x{target_h})')
 
         with torch.no_grad():
             result = self.pipe(
@@ -230,6 +240,9 @@ class MinimaxInpaint:
                 iterations=0,  # No extra dilation — CRAFT masks already dilated
                 output_type="np",
             )
+
+        log_vram(f'after inference ({num_frames} frames)')
+        torch.cuda.reset_peak_memory_stats()
 
         # result.frames[0] is numpy [F, H, W, 3] in [0, 1]
         video = result.frames[0]
