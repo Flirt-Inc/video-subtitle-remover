@@ -25,6 +25,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LAMA_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'big-lama')
 STTN_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'sttn', 'infer_model.pth')
 VIDEO_INPAINT_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'video')
+MINIMAX_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'minimax-remover')
 MODEL_VERSION = 'V4'
 DET_MODEL_BASE = os.path.join(BASE_DIR, 'models')
 DET_MODEL_PATH = os.path.join(DET_MODEL_BASE, MODEL_VERSION, 'ch_det')
@@ -96,6 +97,7 @@ class InpaintMode(Enum):
     STTN = 'sttn'
     LAMA = 'lama'
     PROPAINTER = 'propainter'
+    MINIMAX = 'minimax'
 
 
 # ×××××××××××××××××××× [可以改] start ××××××××××××××××××××
@@ -174,4 +176,17 @@ PROPAINTER_MAX_LOAD_NUM = 70
 # 是否开启极速模式，开启后不保证inpaint效果，仅仅对包含文本的区域文本进行去除
 LAMA_SUPER_FAST = False
 # ×××××××××× InpaintMode.LAMA算法设置 end ××××××××××
+
+# ×××××××××× InpaintMode.MINIMAX算法设置 start ××××××××××
+# Number of diffusion inference steps (6-12, lower = faster but less quality)
+MINIMAX_INFERENCE_STEPS = 8
+# Maximum frames per chunk (must satisfy (F-1) % 4 == 0, max 81)
+MINIMAX_MAX_FRAMES = 81
+# Overlap frames between chunks for sliding window blending
+MINIMAX_OVERLAP = 8
+# Target short-side resolution for inference (480 tested, higher = more VRAM)
+MINIMAX_TARGET_SHORT_SIDE = 480
+# Enable model CPU offloading to reduce peak VRAM
+MINIMAX_CPU_OFFLOAD = True
+# ×××××××××× InpaintMode.MINIMAX算法设置 end ××××××××××
 # ×××××××××××××××××××× [可以改] end ××××××××××××××××××××

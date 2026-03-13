@@ -24,6 +24,7 @@ import tempfile
 import multiprocessing
 from shapely.geometry import Polygon
 import time
+import numpy as np
 from tqdm import tqdm
 
 
@@ -902,6 +903,59 @@ class SubtitleRemover:
             self.progress_remover = 100 * float(index) / float(self.frame_count) // 2
             self.progress_total = 50 + self.progress_remover
 
+    def minimax_mode(self, tbar):
+        """MiniMax-Remover: video diffusion inpainting.
+
+        Unlike STTN which only processes text-containing frame ranges,
+        MiniMax needs ALL frames for temporal context since it's a video
+        diffusion model.
+        """
+        print('use minimax mode')
+        from backend.inpaint.minimax_inpaint import MinimaxInpaint
+
+        # Step 1: Detect subtitles
+        sub_list = self.sub_detector.find_subtitle_frame_no(sub_remover=self)
+
+        # Step 2: Read ALL frames and build per-frame masks
+        print('[Processing] reading all frames and building masks...')
+        all_frames = []
+        all_masks = []
+        self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        frame_idx = 0
+        while True:
+            ret, frame = self.video_cap.read()
+            if not ret:
+                break
+            frame_idx += 1
+            all_frames.append(frame)
+
+            # Build mask for this frame (zeros if no text detected)
+            if frame_idx in sub_list:
+                mask = create_mask(
+                    self.mask_size, sub_list[frame_idx],
+                    polygons=self._get_polygons(frame_idx),
+                    frame=frame
+                )
+            else:
+                mask = np.zeros(self.mask_size, dtype=np.uint8)
+            all_masks.append(mask)
+
+        print(f'[Processing] {len(all_frames)} frames loaded, {len(sub_list)} with text')
+
+        # Step 3: Initialize MiniMax model
+        minimax = MinimaxInpaint()
+
+        # Step 4: Run inpainting on all frames
+        print(f'[Processing] inpainting {len(all_frames)} frames with MiniMax...')
+        inpainted_frames = minimax(all_frames, all_masks)
+
+        # Step 5: Write output frames
+        for i, inpainted_frame in enumerate(inpainted_frames):
+            self.video_writer.write(inpainted_frame)
+            self.update_progress(tbar, increment=1)
+            if self.gui_mode:
+                self.preview_frame = cv2.hconcat([all_frames[i], inpainted_frame])
+
     def run(self):
         # 记录开始时间
         start_time = time.time()
@@ -929,6 +983,8 @@ class SubtitleRemover:
                 self.propainter_mode(tbar)
             elif config.MODE == config.InpaintMode.STTN:
                 self.sttn_mode(tbar)
+            elif config.MODE == config.InpaintMode.MINIMAX:
+                self.minimax_mode(tbar)
             else:
                 self.lama_mode(tbar)
         self.video_cap.release()
